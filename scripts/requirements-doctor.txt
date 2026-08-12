@@ -1,0 +1,4 @@
+# Runtime for the read-only Doctor tab. Pin the exact source revision that the
+# integration was developed against; local development may instead install the
+# adjacent checkout with: pip install -e ../lerobot-doctor
+lerobot-doctor @ git+https://github.com/jashshah999/lerobot-doctor.git@1d32507ac3ca71151e9320c5b486483fe3fe89b7

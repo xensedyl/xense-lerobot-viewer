@@ -12,6 +12,7 @@ This fork removes the Hugging Face Hub remote-loading path; everything reads fro
 - **Synchronized video + telemetry**: episode pages play all cameras side-by-side, synced to interactive Recharts time series for `observation.state`, `action`, and other signals.
 - **Language annotations editor** (lerobot v3.1 schema): an **Annotations** tab for authoring per-episode language atoms — subtasks, plans, memory, task rephrasings, interjections, robot speech, and VQA. Draw a bounding box or click a keypoint directly on any video for grounded VQA, arrange events on a multi-track timeline, and edit each atom in an inspector. Saves to `meta/lerobot_annotations.json` inside the dataset. See [Annotating episodes](#annotating-episodes) below.
 - **Statistics, Frames, Action Insights, Filtering** panels for dataset quality inspection — flagged episodes can be exported as a ready-to-run LeRobot CLI command.
+- **Doctor**: read-only, dataset-wide quality diagnostics from [`lerobot-doctor`](https://github.com/jashshah999/lerobot-doctor), shown directly after Action Insights. Runs 11 checks covering metadata, timing, actions, videos, statistics, episode consistency, training readiness, anomalies, and portability; affected episode IDs can be added to the existing flagged-episode workflow in one click.
 - **3D URDF replay** for SO-100, SO-101, and OpenArm bimanual robots, with auto-matched joint mapping that tolerates `.pos` / `.position` / `.q` column suffixes. URDF assets load from the public Hugging Face `lerobot/robot-urdfs` bucket.
 - **Per-card "Open episode N" shortcut**: jump straight to a specific episode from the homepage card.
 - Supports dataset codebase versions **v2.0 / v2.1 / v3.0** (autodetected from `meta/info.json`).
@@ -19,6 +20,7 @@ This fork removes the Hugging Face Hub remote-loading path; everything reads fro
 ## Prerequisites
 
 - [Bun](https://bun.sh) for the package manager and test runner
+- Python 3.10+ for Doctor and the subtask parquet exporter
 - A directory of LeRobot datasets on disk
 
 ```bash
@@ -31,7 +33,18 @@ curl -fsSL https://bun.sh/install | bash
 git clone git@github.com:XenseRobotics-AI/xense-lerobot-viewer.git
 cd xense-lerobot-viewer
 bun install
-bun dev
+python3 -m venv .venv
+.venv/bin/pip install -r scripts/requirements.txt -e ../lerobot-doctor
+PYTHON_BIN=.venv/bin/python bun dev
+```
+
+The editable install above uses an adjacent `../lerobot-doctor` checkout. If
+you do not keep that repository next to the viewer, install the pinned source
+revision instead:
+
+```bash
+.venv/bin/pip install -r scripts/requirements.txt -r scripts/requirements-doctor.txt
+PYTHON_BIN=.venv/bin/python bun dev
 ```
 
 Open <http://localhost:3000>. The homepage scans your local LeRobot root and shows everything it finds.
@@ -193,6 +206,7 @@ This fork is **local-only**: there is no FastAPI backend and no push-to-Hub. Wri
 ## Architecture notes
 
 - Dataset files are served by an internal route `/api/local-datasets/[encodedPath]/[...filePath]` with HTTP range support for video streaming.
+- The Doctor tab posts to `…/[encodedPath]/doctor`, which invokes `scripts/run_lerobot_doctor.py` in a bounded child process (5-minute timeout and 10 MiB output cap). It is read-only, defaults to the first 25 episodes for parquet-backed checks, and can be rerun against 10/25/50/100 episodes or the full dataset.
 - Dataset-level sidecars are read/written through dedicated routes: `…/[encodedPath]/tags` (`xense_tags.json`) and `…/[encodedPath]/annotations` (`lerobot_annotations.json`).
 - The homepage discovers datasets via `src/lib/local-datasets-discovery.ts`.
 - All cloud/HF Hub loading code (OAuth, proxy, search) has been removed.
@@ -200,7 +214,9 @@ This fork is **local-only**: there is no FastAPI backend and no push-to-Hub. Wri
 
 ## Docker
 
-The Dockerfile declares a `VOLUME ["/data/lerobot"]` and defaults `LOCAL_DATASET_ROOT=/data/lerobot` — mount your host LeRobot cache there:
+The Docker image includes the pinned `lerobot-doctor` Python runtime. The
+Dockerfile declares a `VOLUME ["/data/lerobot"]` and defaults
+`LOCAL_DATASET_ROOT=/data/lerobot` — mount your host LeRobot cache there:
 
 ```bash
 docker build -t xense-lerobot-visualizer .
@@ -230,3 +246,5 @@ docker run -p 7860:7860 \
 ## Acknowledgement
 
 This project is forked from the LeRobot dataset visualizer originally created by [@Mishig25](https://github.com/mishig25) (huggingface/lerobot PR [#1055](https://github.com/huggingface/lerobot/pull/1055)).
+
+Dataset diagnostics are provided by [`lerobot-doctor`](https://github.com/jashshah999/lerobot-doctor) by Jash Shah (Apache-2.0).

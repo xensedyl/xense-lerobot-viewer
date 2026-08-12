@@ -47,6 +47,7 @@ const ActionInsightsPanel = lazy(
   () => import("@/components/action-insights-panel"),
 );
 const FilteringPanel = lazy(() => import("@/components/filtering-panel"));
+const DoctorPanel = lazy(() => import("@/components/doctor-panel"));
 const ParquetTablePanel = lazy(
   () => import("@/components/parquet-table-panel"),
 );
@@ -77,6 +78,7 @@ type ActiveTab =
   | "statistics"
   | "frames"
   | "insights"
+  | "doctor"
   | "filtering"
   | "urdf"
   | "parquet";
@@ -130,7 +132,7 @@ function TabButton({
     <button
       onClick={onClick}
       title={title}
-      className={`relative px-5 py-3 text-xs font-medium tracking-wide uppercase transition-colors ${
+      className={`relative shrink-0 px-5 py-3 text-xs font-medium tracking-wide uppercase transition-colors ${
         active ? "text-cyan-300" : "text-slate-400 hover:text-slate-100"
       }`}
     >
@@ -305,6 +307,7 @@ function EpisodeViewerInner({
           "statistics",
           "frames",
           "insights",
+          "doctor",
           "filtering",
           "urdf",
           "parquet",
@@ -603,10 +606,10 @@ function EpisodeViewerInner({
     <div className="flex flex-col h-screen max-h-screen bg-[var(--bg)] text-[var(--text-primary)]">
       <UrlTimeSync />
       {/* Top tab bar */}
-      <div className="flex items-center border-b border-white/5 bg-[var(--surface-0)] shrink-0">
+      <div className="flex items-center overflow-x-auto border-b border-white/5 bg-[var(--surface-0)] shrink-0">
         <Link
           href="/"
-          className="flex items-center border-r border-white/5 px-5 py-3 text-base font-bold tracking-tight transition-opacity hover:opacity-80"
+          className="flex shrink-0 items-center border-r border-white/5 px-5 py-3 text-base font-bold tracking-tight transition-opacity hover:opacity-80"
           title="Xense Robotics · back to dataset browser"
         >
           <span className="bg-gradient-to-r from-cyan-300 to-sky-300 bg-clip-text text-transparent">
@@ -628,11 +631,16 @@ function EpisodeViewerInner({
         {renderTab("frames", "Frames")}
         {renderTab("insights", "Action Insights")}
         {renderTab(
+          "doctor",
+          "Doctor",
+          "Run read-only lerobot-doctor dataset quality diagnostics",
+        )}
+        {renderTab(
           "parquet",
           "Parquet",
           "Browse the raw contents of any parquet file in this dataset",
         )}
-        <div className="ml-auto flex items-center gap-1 pr-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1 pr-2">
           <Link
             href="/"
             className="inline-flex items-center px-4 py-3 text-xs font-medium tracking-wide uppercase text-slate-400 transition-colors hover:text-slate-100"
@@ -851,6 +859,15 @@ function EpisodeViewerInner({
                 fps={datasetInfo.fps}
                 crossEpisodeData={crossEpData}
                 crossEpisodeLoading={insightsLoading}
+              />
+            </Suspense>
+          )}
+
+          {activeTab === "doctor" && (
+            <Suspense fallback={<Loading />}>
+              <DoctorPanel
+                encodedPath={encodedDatasetPath}
+                datasetName={datasetDisplayName}
               />
             </Suspense>
           )}
