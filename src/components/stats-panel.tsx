@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   DatasetDisplayInfo,
   EpisodeLengthHistogramBin,
+  EpisodeLengthInfo,
   EpisodeLengthStats,
   CameraInfo,
 } from "@/app/[org]/[dataset]/[episode]/fetch-data";
 import { getDisplayNameForRepoId } from "@/utils/datasetRoute";
+import {
+  assignEpisodesToBins,
+  type HistogramBinning,
+} from "@/utils/episodeLengthHistogram";
 
 interface StatsPanelProps {
   datasetInfo: DatasetDisplayInfo;
@@ -26,8 +31,12 @@ function formatTotalTime(totalFrames: number, fps: number): string {
 /** SVG bar chart for the episode-length histogram */
 function EpisodeLengthHistogram({
   data,
+  episodes,
+  binning,
 }: {
   data: EpisodeLengthHistogramBin[];
+  episodes: EpisodeLengthInfo[];
+  binning: HistogramBinning;
 }) {
   const [activeBinIndex, setActiveBinIndex] = useState(() =>
     Math.max(
@@ -35,11 +44,20 @@ function EpisodeLengthHistogram({
       data.findIndex((bin) => bin.count > 0),
     ),
   );
+  // Per-bin membership is derived here rather than shipped from the server —
+  // `episodes` already carries every index, so sending them per bin too would
+  // put the same integers on the wire twice.
+  const binEpisodeIndices = useMemo(
+    () => assignEpisodesToBins(episodes, binning),
+    [episodes, binning],
+  );
+
   if (data.length === 0) return null;
   const maxCount = Math.max(...data.map((d) => d.count));
   if (maxCount === 0) return null;
 
   const activeBin = data[activeBinIndex] ?? data[0];
+  const activeEpisodeIndices = binEpisodeIndices[activeBinIndex] ?? [];
 
   const totalWidth = 560;
   const gap = Math.max(1, Math.min(3, Math.floor(60 / data.length)));
@@ -67,11 +85,9 @@ function EpisodeLengthHistogram({
             const x = i * (barWidth + gap);
             const y = topPad + chartHeight - barH;
             const isActive = i === activeBinIndex;
-            const titleIndices = bin.episodeIndices.slice(0, 20).join(", ");
-            const remainingIndices = Math.max(
-              0,
-              bin.episodeIndices.length - 20,
-            );
+            const episodeIndices = binEpisodeIndices[i] ?? [];
+            const titleIndices = episodeIndices.slice(0, 20).join(", ");
+            const remainingIndices = Math.max(0, episodeIndices.length - 20);
             return (
               <g
                 key={i}
@@ -149,8 +165,8 @@ function EpisodeLengthHistogram({
           Episode indices
         </p>
         <p className="mt-1 max-h-24 overflow-y-auto break-words font-mono text-xs leading-5 text-slate-300 select-all">
-          {activeBin.episodeIndices.length > 0
-            ? activeBin.episodeIndices.map((index) => `ep ${index}`).join(", ")
+          {activeEpisodeIndices.length > 0
+            ? activeEpisodeIndices.map((index) => `ep ${index}`).join(", ")
             : "None"}
         </p>
       </div>
@@ -292,7 +308,11 @@ function StatsPanel({
                   {els.episodeLengthHistogram.length !== 1 ? "s" : ""}
                 </span>
               </h3>
-              <EpisodeLengthHistogram data={els.episodeLengthHistogram} />
+              <EpisodeLengthHistogram
+                data={els.episodeLengthHistogram}
+                episodes={els.allEpisodeLengths}
+                binning={els.episodeLengthHistogramBinning}
+              />
             </div>
           )}
         </>

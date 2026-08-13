@@ -21,6 +21,10 @@ import {
   buildV3EpisodesMetadataPath,
 } from "@/utils/stringFormatting";
 import { bigIntToNumber } from "@/utils/typeGuards";
+import {
+  assignEpisodesToBins,
+  type HistogramBinning,
+} from "@/utils/episodeLengthHistogram";
 import type { VideoInfo, AdjacentEpisodeVideos } from "@/types";
 
 const SERIES_NAME_DELIMITER = CHART_CONFIG.SERIES_NAME_DELIMITER;
@@ -79,7 +83,6 @@ export type EpisodeLengthInfo = {
 export type EpisodeLengthHistogramBin = {
   binLabel: string;
   count: number;
-  episodeIndices: number[];
 };
 
 export type EpisodeLengthStats = {
@@ -90,6 +93,12 @@ export type EpisodeLengthStats = {
   medianEpisodeLength: number;
   stdEpisodeLength: number;
   episodeLengthHistogram: EpisodeLengthHistogramBin[];
+  /**
+   * Bin geometry for `episodeLengthHistogram`. Lets the client recover which
+   * episodes fall in each bin from `allEpisodeLengths` via `assignEpisodesToBins`,
+   * instead of the server shipping every episode index a second time.
+   */
+  episodeLengthHistogramBinning: HistogramBinning;
 };
 
 export type EpisodeFrameInfo = {
@@ -1630,14 +1639,14 @@ export async function loadAllEpisodeLengthsV3(
         medianEpisodeLength: median,
         stdEpisodeLength: std,
         episodeLengthHistogram: [
-          {
-            binLabel: `${histMin.toFixed(1)}s`,
-            count: lengths.length,
-            episodeIndices: withSeconds
-              .map((episode) => episode.episodeIndex)
-              .sort((a, b) => a - b),
-          },
+          { binLabel: `${histMin.toFixed(1)}s`, count: lengths.length },
         ],
+        // Single length value across the dataset: one bin, zero width.
+        episodeLengthHistogramBinning: {
+          min: histMin,
+          width: 0,
+          binCount: 1,
+        },
       };
     }
 
@@ -1662,24 +1671,22 @@ export async function loadAllEpisodeLengthsV3(
       1,
       Math.round((niceMax - niceMin) / niceBinWidth),
     );
-    const bins = Array.from({ length: actualBinCount }, () => [] as number[]);
+    const binning: HistogramBinning = {
+      min: niceMin,
+      width: niceBinWidth,
+      binCount: actualBinCount,
+    };
 
-    for (const episode of withSeconds) {
-      const len = episode.lengthSeconds;
-      let binIdx = Math.floor((len - niceMin) / niceBinWidth);
-      if (binIdx < 0) binIdx = 0;
-      if (binIdx >= actualBinCount) binIdx = actualBinCount - 1;
-      bins[binIdx].push(episode.episodeIndex);
-    }
+    // Same helper the client uses to recover per-bin membership, so the bar
+    // counts and the inspected episode list stay in lockstep.
+    const bins = assignEpisodesToBins(withSeconds, binning);
 
     const histogram = bins.map((episodeIndices, i) => {
       const lo = niceMin + i * niceBinWidth;
       const hi = lo + niceBinWidth;
-      episodeIndices.sort((a, b) => a - b);
       return {
         binLabel: `${lo.toFixed(1)}–${hi.toFixed(1)}s`,
         count: episodeIndices.length,
-        episodeIndices,
       };
     });
 
@@ -1691,6 +1698,7 @@ export async function loadAllEpisodeLengthsV3(
       medianEpisodeLength: median,
       stdEpisodeLength: std,
       episodeLengthHistogram: histogram,
+      episodeLengthHistogramBinning: binning,
     };
   } catch {
     return null;
