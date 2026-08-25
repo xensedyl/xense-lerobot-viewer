@@ -83,15 +83,15 @@ function isKeyboardFocusInsideTextEntry(target: EventTarget | null): boolean {
 }
 
 /**
- * Space *activates* a focused button or link. Stealing it for play/pause
- * would leave every button in the viewer un-activatable by keyboard, so the
- * Space shortcut yields here — the arrow shortcuts, which these elements
- * don't consume, deliberately do not.
+ * Space *activates* a focused button. Stealing it for play/pause would leave
+ * every button in the viewer un-activatable by keyboard. Sidebar Episode
+ * entries are links so they can retain copy/open-link behaviour, but links do
+ * not have a native Space action; let the global playback shortcut handle
+ * Space for them instead of allowing the browser to scroll the sidebar.
  */
 function isKeyboardFocusOnActivatable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  return tag === "BUTTON" || (tag === "A" && target.hasAttribute("href"));
+  return target.tagName === "BUTTON" || Boolean(target.closest("button"));
 }
 
 type ActiveTab =
